@@ -1,0 +1,272 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), vector, pgTrgm(map: "pg_trgm")]
+}
+
+enum ProductSource {
+  TIKTOK_SHOP
+  AMAZON
+  ALIEXPRESS
+  TEMU
+  ETSY
+  FACEBOOK_ADS
+  REDDIT
+  PINTEREST
+  GOOGLE_TRENDS
+  SHOPIFY_SPY
+}
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  PRO
+  AGENCY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum AlertType {
+  score_spike
+  score_drop
+  new_product
+  saturation
+  system
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Organization {
+  id           String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name         String
+  slug         String           @unique
+  plan         SubscriptionPlan @default(FREE)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  users        User[]
+  subscription Subscription?
+  apiKeys      ApiKey[]
+  aiGenerations AiGeneration[]
+  competitors  Competitor[]
+}
+
+model User {
+  id                      String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId          String       @db.Uuid
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email                   String       @unique
+  name                    String?
+  passwordHash            String
+  role                    Role         @default(MEMBER)
+  emailVerified           Boolean      @default(false)
+  notificationPreferences Json         @default("{\"emailScoreAlerts\":true,\"emailNewProducts\":true,\"emailBilling\":true}")
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  refreshTokens           RefreshToken[]
+  apiKeys                 ApiKey[]
+  watchlist               Watchlist[]
+  alerts                  Alert[]
+  notifications           Notification[]
+  aiGenerations           AiGeneration[]
+}
+
+model RefreshToken {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model ApiKey {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  keyHash        String       @unique
+  keyPrefix      String
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+}
+
+model Subscription {
+  id                   String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId       String             @unique @db.Uuid
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  plan                 SubscriptionPlan   @default(FREE)
+  status               SubscriptionStatus @default(TRIALING)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  trialEndsAt          DateTime?
+  canceledAt           DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model Product {
+  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  externalId      String        @unique
+  title           String
+  description     String?
+  url             String?
+  imageUrl        String?
+  source          ProductSource
+  price           Decimal?      @db.Decimal(10, 2)
+  currency        String        @default("USD")
+  score           Int           @default(0)
+  engagementScore Int           @default(0)
+  tags            String[]      @default([])
+  categories      String[]      @default([])
+  metadata        Json          @default("{}")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  scores          ProductScore[]
+  countries       ProductCountry[]
+  watchlists      Watchlist[]
+  alerts          Alert[]
+  aiGenerations   AiGeneration[]
+  hypeCycles      HypeCycle[]
+}
+
+model ProductScore {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId String   @db.Uuid
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  score     Int
+  subScores Json     @default("{}")
+  scoredAt  DateTime @default(now())
+}
+
+model ProductCountry {
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId        String   @db.Uuid
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  countryCode      String   @db.Char(2)
+  score            Int      @default(0)
+  searchVolume     Int?
+  competitionLevel Decimal? @db.Decimal(3, 2)
+  estimatedMargin  Decimal? @db.Decimal(5, 2)
+  saturation       Decimal? @db.Decimal(3, 2)
+  metadata         Json     @default("{}")
+  updatedAt        DateTime @updatedAt
+
+  @@unique([productId, countryCode])
+}
+
+model CountryMetric {
+  id                 String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  countryCode        String   @unique @db.Char(2)
+  ecommerceMaturity  Float    @default(0.5)
+  avgCPC             Float    @default(1.0)
+  logisticsScore     Float    @default(0.8)
+  competitionDensity Float    @default(0.5)
+  avgOrderValue      Int      @default(30)
+  language           String   @default("en")
+  updatedAt          DateTime @updatedAt
+}
+
+model Watchlist {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String   @db.Uuid
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Alert {
+  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String?   @db.Uuid
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  type      AlertType
+  title     String
+  message   String?
+  read      Boolean   @default(false)
+  metadata  Json      @default("{}")
+  createdAt DateTime  @default(now())
+}
+
+model Notification {
+  id       String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId   String   @db.Uuid
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type     String
+  title    String
+  read     Boolean  @default(false)
+  metadata Json     @default("{}")
+  sentAt   DateTime @default(now())
+}
+
+model AiGeneration {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productId      String?      @db.Uuid
+  product        Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  type           String
+  model          String
+  prompt         String?
+  result         String
+  tokens         Int?
+  createdAt      DateTime     @default(now())
+}
+
+model Competitor {
+  id              String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String       @db.Uuid
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  url             String
+  name            String?
+  estimatedRevenue BigInt?
+  productCount    Int?
+  theme           String?
+  appsInstalled   String[]     @default([])
+  adsActive       Boolean      @default(false)
+  trendScore      Int          @default(0)
+  scoreDelta      Int          @default(0)
+  metadata        Json         @default("{}")
+  lastScrapedAt   DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([organizationId, url])
+}
+
+model HypeCycle {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId   String   @db.Uuid
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  phase       String
+  confidence  Decimal  @db.Decimal(3, 2)
+  predictedAt DateTime @default(now())
+  metadata    Json     @default("{}")
+}
