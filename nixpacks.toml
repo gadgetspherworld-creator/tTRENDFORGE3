@@ -8,4 +8,4 @@ cmds = ["pnpm install --no-frozen-lockfile"]
 cmds = ["pnpm run build --filter @trendforge/web"]
 
 [start]
-cmd = "node apps/web/.next/standalone/server.js"
+cmd = "cd apps/web && node .next/standalone/server.js"
