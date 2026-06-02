@@ -8,4 +8,4 @@ cmds = ["pnpm install --no-frozen-lockfile"]
 cmds = ["pnpm --filter @trendforge/web run build"]
 
 [start]
-cmd = "find /app -name 'server.js' -path '*standalone*' && node $(find /app -name 'server.js' -path '*standalone*' | head -1)"
+cmd = "pnpm --filter @trendforge/web start"
