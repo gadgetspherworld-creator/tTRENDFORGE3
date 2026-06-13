@@ -16,3 +16,4 @@ const config = {
   },
 }
 export default config
+fix: add standalone output
