@@ -11,9 +11,9 @@ const config = {
   async headers() {
     return [{ source: '/api/:path*', headers: [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
-      { key: 'X-Frame-Options',        value: 'DENY' },
+      { key: 'X-Frame-Options', value: 'DENY' },
     ]}]
   },
 }
+
 export default config
-fix: add standalone output
